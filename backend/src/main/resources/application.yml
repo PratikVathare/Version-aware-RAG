@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: version-aware-rag-backend
+
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 25MB
+      max-request-size: 25MB
+
+  datasource:
+    url: ${SUPABASE_DB_URL:jdbc:postgresql://localhost:5432/postgres}
+    username: ${SUPABASE_DB_USER:postgres}
+    password: ${SUPABASE_DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  ai:
+    openai:
+      # Groq exposes an OpenAI-compatible API endpoint
+      base-url: ${GROQ_BASE_URL:https://api.groq.com/openai}
+      api-key: ${GROQ_API_KEY:gsk_your_groq_api_key_here}
+      chat:
+        options:
+          model: ${GROQ_MODEL:llama-3.3-70b-versatile}
+          temperature: 0.1
+
+rag:
+  embedding:
+    model-name: ${EMBEDDING_MODEL_NAME:sentence-transformers/all-MiniLM-L6-v2}
+    dimension: 384
+    # Local HuggingFace/ONNX service or dedicated embedding service endpoint if applicable
+    service-url: ${EMBEDDING_SERVICE_URL:http://localhost:8000/embed}
+  vector:
+    distance-type: COSINE
+    similarity-threshold: 0.7
+    default-top-k: 5
+
+server:
+  port: ${PORT:8081}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html

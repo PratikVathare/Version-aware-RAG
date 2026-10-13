@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: version-aware-rag-backend-test
+  jpa:
+    hibernate:
+      ddl-auto: none
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+  ai:
+    openai:
+      api-key: test-groq-key
+      base-url: https://api.groq.com/openai
+
+rag:
+  embedding:
+    model-name: sentence-transformers/all-MiniLM-L6-v2
+    dimension: 384
