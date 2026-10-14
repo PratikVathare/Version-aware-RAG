@@ -76,4 +76,102 @@ class SemanticSearchServiceImplTest {
         verify(embeddingService, times(1)).generateEmbedding(question);
         verify(documentChunkRepository, times(1)).searchSimilarChunks(eq(queryVector.getValue()), eq(10));
     }
+
+    @Test
+    @DisplayName("Should filter out older versions and keep only latest version when multiple versions are retrieved")
+    void testSemanticSearchFiltersOlderVersions() {
+        String question = "What is the password rotation policy?";
+        PGvector queryVector = new PGvector(new float[]{0.1f, 0.2f, 0.3f});
+        when(embeddingService.generateEmbedding(question)).thenReturn(queryVector);
+
+        // Version 1 of Security Policy (older version, higher similarity score)
+        ChunkSimilarityProjection v1 = mock(ChunkSimilarityProjection.class);
+        when(v1.getId()).thenReturn(UUID.randomUUID());
+        when(v1.getDocumentName()).thenReturn("Security Policy");
+        when(v1.getVersionNumber()).thenReturn(1);
+        when(v1.getEffectiveDate()).thenReturn(LocalDate.of(2023, 1, 1));
+        when(v1.getDepartment()).thenReturn("IT");
+        when(v1.getChunkText()).thenReturn("Passwords expire every 30 days.");
+        when(v1.getSimilarity()).thenReturn(0.95);
+        when(v1.getCreatedAt()).thenReturn(OffsetDateTime.now());
+
+        // Version 2 of Security Policy (latest version, lower similarity score)
+        ChunkSimilarityProjection v2 = mock(ChunkSimilarityProjection.class);
+        when(v2.getId()).thenReturn(UUID.randomUUID());
+        when(v2.getDocumentName()).thenReturn("Security Policy");
+        when(v2.getVersionNumber()).thenReturn(2);
+        when(v2.getEffectiveDate()).thenReturn(LocalDate.of(2024, 1, 1));
+        when(v2.getDepartment()).thenReturn("IT");
+        when(v2.getChunkText()).thenReturn("Passwords expire every 90 days with MFA.");
+        when(v2.getSimilarity()).thenReturn(0.89);
+        when(v2.getCreatedAt()).thenReturn(OffsetDateTime.now());
+
+        when(documentChunkRepository.searchSimilarChunks(anyString(), anyInt()))
+                .thenReturn(List.of(v1, v2));
+
+        List<SearchResultDto> results = semanticSearchService.searchSimilarChunks(question, 10);
+
+        // Only the current version (v2) chunks must be returned; older version (v1) ignored
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        SearchResultDto retainedChunk = results.get(0);
+        assertEquals(2, retainedChunk.getVersionNumber());
+        assertEquals("Passwords expire every 90 days with MFA.", retainedChunk.getChunkText());
+    }
+
+    @Test
+    @DisplayName("Should resolve latest version using most recent effective date when version numbers are equal")
+    void testSemanticSearchFiltersByEffectiveDateWhenVersionNumbersEqual() {
+        String question = "What is the travel per diem allowance?";
+        PGvector queryVector = new PGvector(new float[]{0.1f, 0.2f, 0.3f});
+        when(embeddingService.generateEmbedding(question)).thenReturn(queryVector);
+
+        // 2023 version with versionNumber = 1
+        ChunkSimilarityProjection oldDateChunk = mock(ChunkSimilarityProjection.class);
+        when(oldDateChunk.getId()).thenReturn(UUID.randomUUID());
+        when(oldDateChunk.getDocumentName()).thenReturn("Travel Policy");
+        when(oldDateChunk.getVersionNumber()).thenReturn(1);
+        when(oldDateChunk.getEffectiveDate()).thenReturn(LocalDate.of(2023, 1, 1));
+        when(oldDateChunk.getChunkText()).thenReturn("Per diem is $50/day");
+        when(oldDateChunk.getSimilarity()).thenReturn(0.92);
+
+        // 2024 version with versionNumber = 1
+        ChunkSimilarityProjection newDateChunk = mock(ChunkSimilarityProjection.class);
+        when(newDateChunk.getId()).thenReturn(UUID.randomUUID());
+        when(newDateChunk.getDocumentName()).thenReturn("Travel Policy");
+        when(newDateChunk.getVersionNumber()).thenReturn(1);
+        when(newDateChunk.getEffectiveDate()).thenReturn(LocalDate.of(2024, 1, 1));
+        when(newDateChunk.getChunkText()).thenReturn("Per diem is $80/day");
+        when(newDateChunk.getSimilarity()).thenReturn(0.87);
+
+        when(documentChunkRepository.searchSimilarChunks(anyString(), anyInt()))
+                .thenReturn(List.of(oldDateChunk, newDateChunk));
+
+        List<SearchResultDto> results = semanticSearchService.searchSimilarChunks(question, 10);
+
+        // Only 2024 chunk kept based on most recent effective date
+        assertNotNull(results);
+        assertEquals(1, results.size());
+        assertEquals(LocalDate.of(2024, 1, 1), results.get(0).getEffectiveDate());
+        assertEquals("Per diem is $80/day", results.get(0).getChunkText());
+    }
+
+    @Test
+    @DisplayName("Should return raw chunks including multiple versions without filtering")
+    void testSearchRawSimilarChunks() {
+        String question = "Security";
+        PGvector queryVector = new PGvector(new float[]{0.1f, 0.2f, 0.3f});
+        when(embeddingService.generateEmbedding(question)).thenReturn(queryVector);
+
+        ChunkSimilarityProjection p1 = mock(ChunkSimilarityProjection.class);
+        when(p1.getVersionNumber()).thenReturn(1);
+        ChunkSimilarityProjection p2 = mock(ChunkSimilarityProjection.class);
+        when(p2.getVersionNumber()).thenReturn(2);
+
+        when(documentChunkRepository.searchSimilarChunks(anyString(), anyInt()))
+                .thenReturn(List.of(p1, p2));
+
+        List<SearchResultDto> results = semanticSearchService.searchRawSimilarChunks(question, 10);
+        assertEquals(2, results.size());
+    }
 }

@@ -5,6 +5,7 @@ import com.enterprise.rag.repository.ChunkSimilarityProjection;
 import com.enterprise.rag.repository.DocumentChunkRepository;
 import com.enterprise.rag.service.EmbeddingService;
 import com.enterprise.rag.service.SemanticSearchService;
+import com.enterprise.rag.util.VersionFilterUtils;
 import com.pgvector.PGvector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,13 +30,13 @@ public class SemanticSearchServiceImpl implements SemanticSearchService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<SearchResultDto> searchSimilarChunks(String question, int topK) {
+    public List<SearchResultDto> searchRawSimilarChunks(String question, int topK) {
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException("Question cannot be empty for semantic search");
         }
 
         int limit = (topK > 0) ? topK : 10;
-        log.info("Executing semantic search for question: '{}' (topK={})", question, limit);
+        log.info("Executing raw semantic search for question: '{}' (topK={})", question, limit);
 
         // 1. Generate 384-dimensional query embedding via local Python embedding service
         PGvector queryEmbedding = embeddingService.generateEmbedding(question);
@@ -65,5 +66,25 @@ public class SemanticSearchServiceImpl implements SemanticSearchService {
                         .createdAt(p.getCreatedAt())
                         .build())
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SearchResultDto> searchSimilarChunks(String question, int topK) {
+        List<SearchResultDto> dtos = searchRawSimilarChunks(question, topK);
+
+        // Version filtering: When multiple versions of the same document are retrieved,
+        // only keep the latest version based on 1. Highest version number OR 2. Most recent effective date.
+        List<SearchResultDto> currentVersionChunks = VersionFilterUtils.filterLatestVersions(
+                dtos,
+                SearchResultDto::getDocumentName,
+                SearchResultDto::getVersionNumber,
+                SearchResultDto::getEffectiveDate
+        );
+
+        log.info("Semantic search returned {} current version chunks (filtered from {} total retrieved)",
+                currentVersionChunks.size(), dtos.size());
+
+        return currentVersionChunks;
     }
 }
