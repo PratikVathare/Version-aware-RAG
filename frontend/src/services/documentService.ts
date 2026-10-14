@@ -8,9 +8,18 @@ export const documentService = {
    */
   async getDocuments(): Promise<DocumentItem[]> {
     try {
-      const response = await apiClient.get<DocumentItem[]>("/documents");
-      if (response.data && Array.isArray(response.data) && response.data.length > 0) {
-        return response.data;
+      const response = await apiClient.get<any>("/documents");
+      const list = Array.isArray(response.data) ? response.data : response.data?.data;
+      if (Array.isArray(list) && list.length > 0) {
+        return list;
+      }
+      const stored = localStorage.getItem("enterprise_rag_documents");
+      if (stored) {
+        try {
+          return JSON.parse(stored);
+        } catch {
+          // ignore
+        }
       }
       return MOCK_DOCUMENTS;
     } catch {

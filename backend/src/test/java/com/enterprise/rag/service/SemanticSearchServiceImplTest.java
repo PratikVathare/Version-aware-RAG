@@ -55,7 +55,7 @@ class SemanticSearchServiceImplTest {
         when(projection.getDepartment()).thenReturn("Engineering");
         when(projection.getChunkText()).thenReturn("All API keys and passwords must be rotated every 90 days.");
         when(projection.getSimilarity()).thenReturn(0.8845);
-        when(projection.getCreatedAt()).thenReturn(OffsetDateTime.now());
+        when(projection.getCreatedAt()).thenReturn(java.time.Instant.now());
 
         when(documentChunkRepository.searchSimilarChunks(anyString(), anyInt()))
                 .thenReturn(List.of(projection));
@@ -93,7 +93,7 @@ class SemanticSearchServiceImplTest {
         when(v1.getDepartment()).thenReturn("IT");
         when(v1.getChunkText()).thenReturn("Passwords expire every 30 days.");
         when(v1.getSimilarity()).thenReturn(0.95);
-        when(v1.getCreatedAt()).thenReturn(OffsetDateTime.now());
+        when(v1.getCreatedAt()).thenReturn(java.time.Instant.now());
 
         // Version 2 of Security Policy (latest version, lower similarity score)
         ChunkSimilarityProjection v2 = mock(ChunkSimilarityProjection.class);
@@ -104,7 +104,7 @@ class SemanticSearchServiceImplTest {
         when(v2.getDepartment()).thenReturn("IT");
         when(v2.getChunkText()).thenReturn("Passwords expire every 90 days with MFA.");
         when(v2.getSimilarity()).thenReturn(0.89);
-        when(v2.getCreatedAt()).thenReturn(OffsetDateTime.now());
+        when(v2.getCreatedAt()).thenReturn(java.time.Instant.now());
 
         when(documentChunkRepository.searchSimilarChunks(anyString(), anyInt()))
                 .thenReturn(List.of(v1, v2));

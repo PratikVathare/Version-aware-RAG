@@ -227,4 +227,64 @@ public class DocumentServiceImpl implements DocumentService {
 
         return chunks;
     }
+
+    @Override
+    public List<com.enterprise.rag.dto.DocumentSummaryDto> getAllDocuments() {
+        List<DocumentChunk> allChunks = documentChunkRepository.findAll();
+        if (allChunks.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        java.util.Map<String, List<DocumentChunk>> byDocName = allChunks.stream()
+                .collect(java.util.stream.Collectors.groupingBy(DocumentChunk::getDocumentName));
+
+        List<com.enterprise.rag.dto.DocumentSummaryDto> summaries = new ArrayList<>();
+
+        for (java.util.Map.Entry<String, List<DocumentChunk>> entry : byDocName.entrySet()) {
+            String docName = entry.getKey();
+            List<DocumentChunk> docChunks = entry.getValue();
+
+            java.util.Map<Integer, List<DocumentChunk>> byVersion = docChunks.stream()
+                    .collect(java.util.stream.Collectors.groupingBy(DocumentChunk::getVersionNumber));
+
+            int maxVersion = byVersion.keySet().stream().max(Integer::compareTo).orElse(1);
+
+            List<com.enterprise.rag.dto.DocumentVersionDto> versionDtos = new ArrayList<>();
+            for (java.util.Map.Entry<Integer, List<DocumentChunk>> vEntry : byVersion.entrySet()) {
+                int verNum = vEntry.getKey();
+                List<DocumentChunk> vChunks = vEntry.getValue();
+                DocumentChunk sample = vChunks.get(0);
+
+                versionDtos.add(new com.enterprise.rag.dto.DocumentVersionDto(
+                        docName + "-v" + verNum,
+                        verNum,
+                        sample.getEffectiveDate() != null ? sample.getEffectiveDate().toString() : "",
+                        sample.getDepartment() != null ? sample.getDepartment() : "General",
+                        verNum == maxVersion,
+                        vChunks.size(),
+                        vChunks.size(),
+                        sample.getCreatedAt() != null ? sample.getCreatedAt().toString() : ""
+                ));
+            }
+
+            versionDtos.sort((a, b) -> b.getVersionNumber().compareTo(a.getVersionNumber()));
+
+            DocumentChunk sampleLatest = byVersion.get(maxVersion).get(0);
+
+            summaries.add(new com.enterprise.rag.dto.DocumentSummaryDto(
+                    docName,
+                    docName,
+                    docName,
+                    sampleLatest.getDepartment() != null ? sampleLatest.getDepartment() : "General",
+                    maxVersion,
+                    sampleLatest.getCreatedAt() != null ? sampleLatest.getCreatedAt().toString() : "",
+                    versionDtos.size(),
+                    versionDtos
+            ));
+        }
+
+        summaries.sort((a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        return summaries;
+    }
 }
+

@@ -11,62 +11,87 @@ export const chatService = {
 
   async sendQuery(payload: ChatRequest): Promise<ChatResponse> {
     try {
-      // First attempt the dedicated /api/chat endpoint
-      const response = await apiClient.post<ChatResponse>("/chat", payload);
-      return response.data;
-    } catch {
-      try {
-        // Fallback attempt to Spring Boot's /api/v1/rag/query endpoint
-        const backendResp = await apiClient.post("/v1/rag/query", {
-          query: payload.question,
-          documentName: payload.documentName,
-          versionNumber: payload.versionNumber,
-        });
+      const parsedVer = payload.versionNumber
+        ? parseInt(String(payload.versionNumber).replace(/[^0-9]/g, ''), 10)
+        : null;
 
-        const data = backendResp.data?.data || backendResp.data;
-        return {
-          answer: data.answer || "No answer generated.",
-          documentName: data.documentName || "Enterprise Document",
-          version: data.versionNumber || data.resolvedVersion || "v2",
-          effectiveDate: data.effectiveDate || "2024-01-15",
-          department: data.sourceChunks?.[0]?.department || "IT Security",
-          confidence: data.sourceChunks?.[0]?.score || 0.92,
-          retrievedChunks: (data.sourceChunks || []).map(
-            (c: {
-              id?: string;
-              documentName: string;
-              versionNumber: number | string;
-              effectiveDate: string;
-              department?: string;
-              chunkText?: string;
-              score?: number;
-            }) => ({
-              id: c.id || String(Math.random()),
-              documentName: c.documentName,
-              versionNumber: c.versionNumber,
-              effectiveDate: c.effectiveDate,
-              department: c.department,
-              chunkText: c.chunkText || '',
-              similarityScore: c.score,
-            })
-          ),
-          responseTime: data.latencyMs || 215,
-          conflict: Boolean(data.conflict || data.warning),
-          conflictDetails: data.conflict
-            ? {
-                currentVersion: data.conflict.currentVersion || "v2",
-                olderVersion: data.conflict.olderVersion || "v1",
-                conflictDescription:
-                  data.conflict.conflictDescription || "Contradictory values detected between versions.",
-                reasonSelected: "Latest version was automatically selected based on higher version number and most recent effective date.",
-              }
-            : undefined,
-          warning: data.warning,
+      const backendResp = await apiClient.post<{
+        status: string;
+        message: string;
+        data: {
+          answer: string;
+          documentName?: string;
+          versionNumber?: number;
+          effectiveDate?: string;
+          currentVersion?: string;
+          olderVersion?: string;
+          conflictDescription?: string;
+          warning?: string;
+          conflict?: {
+            currentVersion?: string;
+            olderVersion?: string;
+            conflictDescription?: string;
+            warning?: string;
+          };
+          query?: string;
+          resolvedVersion?: string;
+          sourceChunks?: Array<{
+            id?: string;
+            documentName: string;
+            versionNumber: number | string;
+            effectiveDate: string;
+            department?: string;
+            chunkText?: string;
+            score?: number;
+          }>;
+          latencyMs?: number;
         };
-      } catch {
-        // Realistic intelligent demo simulation when backend is not actively running
-        return simulateVersionAwareResponse(payload.question);
-      }
+      }>("/api/v1/rag/query", {
+        query: payload.question,
+        documentName: payload.documentName || null,
+        versionNumber: parsedVer,
+      });
+
+      const data = backendResp.data?.data || backendResp.data;
+
+      return {
+        answer: data.answer || "No answer generated.",
+        documentName: data.documentName || payload.documentName || "Enterprise Document",
+        version: data.versionNumber || data.resolvedVersion || 1,
+        effectiveDate: data.effectiveDate || new Date().toISOString().split('T')[0],
+        department: data.sourceChunks?.[0]?.department || "Enterprise",
+        confidence: data.sourceChunks?.[0]?.score || 0.95,
+        retrievedChunks: (data.sourceChunks || []).map((c) => ({
+          id: c.id || String(Math.random()),
+          documentName: c.documentName,
+          versionNumber: c.versionNumber,
+          effectiveDate: c.effectiveDate,
+          department: c.department,
+          chunkText: c.chunkText || '',
+          similarityScore: c.score,
+        })),
+        responseTime: data.latencyMs || 250,
+        conflict: Boolean(data.conflict || data.warning),
+        conflictDetails: data.conflict
+          ? {
+              currentVersion: data.conflict.currentVersion || "v2",
+              olderVersion: data.conflict.olderVersion || "v1",
+              conflictDescription:
+                data.conflict.conflictDescription || "Contradictory values detected between versions.",
+              reasonSelected: "Latest active version resolved via effective date and version hierarchy.",
+            }
+          : undefined,
+        warning: data.warning,
+      };
+    } catch (err: any) {
+      console.error("[ChatService] Backend query error:", err);
+      const errMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        "Backend unreachable on port 8081";
+
+      throw new Error(errMsg);
     }
   },
 };

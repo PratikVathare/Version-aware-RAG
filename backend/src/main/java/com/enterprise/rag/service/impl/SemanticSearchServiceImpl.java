@@ -63,7 +63,7 @@ public class SemanticSearchServiceImpl implements SemanticSearchService {
                         .department(p.getDepartment())
                         .chunkText(p.getChunkText())
                         .similarityScore(p.getSimilarity() != null ? Math.round(p.getSimilarity() * 10000.0) / 10000.0 : null)
-                        .createdAt(p.getCreatedAt())
+                        .createdAt(p.getCreatedAt() != null ? p.getCreatedAt().atOffset(java.time.ZoneOffset.UTC) : null)
                         .build())
                 .toList();
     }

@@ -48,48 +48,53 @@ export const uploadService = {
       onProgress = metadataOrProgress as (progress: number, stage: UploadStage) => void;
     }
 
+    const versionInt = parseInt(String(versionStr).replace(/[^0-9]/g, '') || '1', 10);
+
     const formData = new FormData();
     formData.append('file', file);
     formData.append('documentName', docName);
-    formData.append('versionNumber', versionStr);
+    formData.append('versionNumber', String(versionInt));
     formData.append('effectiveDate', effectiveDate);
     formData.append('department', department);
 
     try {
       onProgress?.(25, 'Uploading Document');
-      const response = await apiClient.post<DocumentUploadResponse>(
-        '/documents/upload',
+      const response = await apiClient.post<{
+        status: string;
+        message: string;
+        data: Array<{
+          id: string;
+          documentName: string;
+          versionNumber: number;
+          effectiveDate: string;
+          department: string;
+          chunkText: string;
+        }>;
+      }>(
+        '/documents/ingest-pdf',
         formData,
         {
           headers: {
             'Content-Type': 'multipart/form-data',
           },
+          timeout: 180000, // 3 minutes for PDF text extraction, local model embeddings, and cloud pgvector indexing
           onUploadProgress: (progressEvent) => {
             if (progressEvent.total) {
               const percent = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-              onProgress?.(Math.min(percent, 40), 'Uploading Document');
+              onProgress?.(Math.min(percent, 45), 'Uploading Document');
             }
           },
         }
       );
+
       onProgress?.(70, 'Generating Embeddings');
       await new Promise((r) => setTimeout(r, 300));
       onProgress?.(100, 'Indexing into Supabase');
-      return response.data;
-    } catch {
-      // Simulate stepped upload progress: Upload -> Embedding -> Indexing
-      if (onProgress) {
-        onProgress(30, 'Uploading Document');
-        await new Promise((r) => setTimeout(r, 350));
-        onProgress(55, 'Extracting Text');
-        await new Promise((r) => setTimeout(r, 350));
-        onProgress(80, 'Generating Embeddings');
-        await new Promise((r) => setTimeout(r, 400));
-        onProgress(100, 'Indexing into Supabase');
-        await new Promise((r) => setTimeout(r, 200));
-      }
 
-      // Store in local documents cache so UI updates immediately
+      const savedChunks = response.data?.data || [];
+      const totalChunksCount = savedChunks.length || 1;
+
+      // Update local storage documents so sidebar updates with the real document
       const currentDocs = await documentService.getDocuments();
       const existingDoc = currentDocs.find(
         (d) =>
@@ -97,23 +102,20 @@ export const uploadService = {
           d.documentName?.toLowerCase() === docName.toLowerCase()
       );
 
-      const parsedVer = isNaN(Number(versionStr)) ? versionStr : Number(versionStr);
-
       const newVersionEntry = {
         id: `v-${Date.now()}`,
-        versionNumber: parsedVer,
+        versionNumber: versionInt,
         effectiveDate: effectiveDate,
         department: department,
         isCurrent: true,
-        totalChunks: Math.floor(Math.random() * 15) + 12,
-        chunksCount: Math.floor(Math.random() * 15) + 12,
+        totalChunks: totalChunksCount,
+        chunksCount: totalChunksCount,
         createdAt: new Date().toISOString(),
         uploadedBy: 'Current User',
-        changeSummary: `Uploaded revision ${versionStr} with current operational status.`,
+        changeSummary: `Ingested ${totalChunksCount} chunks into Supabase pgvector.`,
       };
 
       let updatedDocs: DocumentItem[];
-
       if (existingDoc) {
         const updatedVersions = (existingDoc.versions || []).map((v) => ({
           ...v,
@@ -125,7 +127,7 @@ export const uploadService = {
           d.id === existingDoc.id
             ? {
                 ...d,
-                currentVersion: parsedVer,
+                currentVersion: versionInt,
                 department: department,
                 lastUpdated: new Date().toISOString(),
                 totalVersions: updatedVersions.length,
@@ -139,7 +141,7 @@ export const uploadService = {
           name: docName,
           documentName: docName,
           department: department,
-          currentVersion: parsedVer,
+          currentVersion: versionInt,
           lastUpdated: new Date().toISOString(),
           totalVersions: 1,
           versions: [newVersionEntry],
@@ -150,13 +152,22 @@ export const uploadService = {
       localStorage.setItem('enterprise_rag_documents', JSON.stringify(updatedDocs));
 
       return {
-        documentId: existingDoc?.id || `doc-${Date.now()}`,
+        documentId: docName,
         documentName: docName,
-        version: parsedVer,
+        version: versionInt,
         department: department,
-        status: 'INDEXED',
-        message: 'Successfully generated 384-dimensional embeddings and indexed in Supabase pgvector.',
+        status: 'SUCCESS',
+        message: `Successfully indexed ${totalChunksCount} chunks into Supabase`,
       };
+    } catch (err: any) {
+      console.error('[UploadService] Upload failed:', err);
+      const errorMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'Failed to connect to backend server on port 8081';
+      throw new Error(`PDF Ingestion Failed: ${errorMsg}`);
     }
   },
 };
+

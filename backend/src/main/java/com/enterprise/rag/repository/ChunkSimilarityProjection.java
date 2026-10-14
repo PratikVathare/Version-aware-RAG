@@ -1,7 +1,7 @@
 package com.enterprise.rag.repository;
 
+import java.time.Instant;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import java.util.UUID;
 
 public interface ChunkSimilarityProjection {
@@ -20,5 +20,6 @@ public interface ChunkSimilarityProjection {
 
     Double getSimilarity();
 
-    OffsetDateTime getCreatedAt();
+    Instant getCreatedAt();
 }
+

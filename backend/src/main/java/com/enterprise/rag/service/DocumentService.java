@@ -27,4 +27,6 @@ public interface DocumentService {
     void deleteDocumentVersion(String documentName, Integer versionNumber);
 
     DocumentChunkDto getChunkById(UUID id);
+
+    List<com.enterprise.rag.dto.DocumentSummaryDto> getAllDocuments();
 }

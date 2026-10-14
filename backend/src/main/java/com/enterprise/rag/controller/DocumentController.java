@@ -31,6 +31,12 @@ public class DocumentController {
         this.pdfDocumentService = pdfDocumentService;
     }
 
+    @GetMapping
+    @Operation(summary = "Get all distinct documents with their version summaries")
+    public ResponseEntity<ApiResponse<List<com.enterprise.rag.dto.DocumentSummaryDto>>> getAllDocuments() {
+        return ResponseEntity.ok(ApiResponse.ok(documentService.getAllDocuments()));
+    }
+
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
     @Operation(
             summary = "Upload PDF and extract chunks",
